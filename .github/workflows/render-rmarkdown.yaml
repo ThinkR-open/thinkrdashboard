@@ -8,6 +8,8 @@ on:
     branches:
       - main
       - master
+  schedule:
+    - cron: '0 0 * * *'  # every day at midnight
 
 jobs:
   build:
@@ -52,7 +54,7 @@ jobs:
       - name: Install packages
         run: |
           R -e 'install.packages("remotes")'
-          R -e 'remotes::install_local(upgrade = "never", force = TRUE)'
+          R -e 'remotes::install_local(force = TRUE)'
 
       - name: Render Rmarkdown files
         run: |
