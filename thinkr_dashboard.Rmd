@@ -166,8 +166,9 @@ valueBox(nrow(issues), icon = "fa-exclamation-circle")
 ```{r}
 if (!is.null(pr_data)) {
   pr_data %>% 
-    filter(!is.na(closed)) %>% 
-    valueBox(nrow(.), icon = "fa-exclamation-circle")
+    filter(is.na(closed)) %>% 
+    nrow() %>% 
+    valueBox(., icon = "fa-exclamation-circle")
 } else {
   valueBox("?", icon = "fa-exclamation-circle")
 }
