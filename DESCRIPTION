@@ -35,7 +35,7 @@ Imports:
     tidyr,
     tidyversedashboard
 Remotes:
-    jimhester/tidyversedashboard
+    jimhester/tidyversedashboard,
     hadley/emo
 Encoding: UTF-8
 LazyData: true
