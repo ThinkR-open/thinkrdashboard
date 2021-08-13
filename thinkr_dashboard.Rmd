@@ -1,0 +1,267 @@
+---
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    theme: yeti
+    source_code: "https://github.com/ThinkR-open/thinkrdashboard"
+params:
+  title:
+    label: Title of report
+    value: ThinkR dashboard
+    input: text
+  start: 
+    label: Start date of report
+    value: !r lubridate::today() - lubridate::ddays(30)
+    input: date
+  orgs:
+    label: GitHub organizations
+    value: ThinkR-open, statnmap, colinfay, VincentGuyader, Cervangirard, MargotBr, DianeBeldame
+    input: text
+  privacy:
+    label: Repository Privacy
+    value: PUBLIC
+    choices: [PUBLIC, PRIVATE, BOTH]
+title: "`r params$title`"	
+---
+
+```{r setup, include = FALSE}
+library(flexdashboard)
+library(gh)
+library(jsonlite)
+library(lubridate)
+library(forcats)
+library(dplyr)
+library(purrr)
+library(tibble)
+library(codetools) # there was a weird error on connect that needed this
+library(DT)
+# remotes::install_github("ThinkR-open/tidyversedashboard", ref = "thinkr-repo")
+library(tidyversedashboard)
+library(tidyr)
+library(sparkline)
+library(ggplot2)
+on_macos <- function() tolower(Sys.info()[["sysname"]]) == "darwin"
+gh_colors <- list(
+  green = "#2cbe4e",
+  red = "#CB2434",
+  purple = "#6f42c1")
+start <- params$start
+duration <- format(today() - start, format = "%d")
+orgs <- scan(text = params$orgs, what = "character", sep = ",", strip.white = TRUE, quiet = TRUE)
+privacy <- normalize_privacy(params$privacy)
+
+# plus1 emoji
+p1 <- "\U0001f44d"
+```
+
+```{r pr_stats, include=FALSE, cache = on_macos()}
+options(repos = c(CRAN='https://cloud.r-project.org'))
+
+pr_data <- tryCatch(
+  map_dfr(orgs, org_pr, privacy = privacy),
+  error = function(e) message(e$content$errors))
+
+if (!is.null(pr_data)) {
+  prs <- pr_data %>% filter(updated >= start) %>%
+    mutate(reviewer = map2(reviews, comments, function(reviews, comments) unique(c(reviews$reviewer, comments$commenter)))) %>%
+    select(owner, repo, issue, author, created, updated, reviewer) %>%
+    unnest(cols = c(reviewer)) %>%
+    filter(reviewer != author, reviewer != "codecov.io") %>%
+    mutate(
+      reviewer = github_user_home(reviewer),
+      author = github_user_home(author))
+
+  pr_authors <- prs %>% group_by(author) %>% select(-reviewer) %>% unique() %>% tally(sort = TRUE)
+  pr_reviewers <- prs %>% group_by(reviewer) %>% select(-author) %>% unique() %>% tally(sort = TRUE)
+  pr_pairs <- prs %>% group_by(author, reviewer) %>% tally(sort = TRUE)
+} else {
+  pr_authors <- NULL
+  pr_reviewers <- NULL
+  pr_pairs <- NULL
+}
+```
+
+```{r repo_stats, include = FALSE, cache = on_macos()}
+repo_data <- map(orgs, org_data, privacy)
+
+repo_summary <- map_dfr(repo_data, "summary")
+issues <- map_dfr(repo_data, "issues")
+```
+
+
+`r duration` issue progress
+=====================================
+```{r issue_progress, cache = on_macos(), include = FALSE}
+issue_data <- map_dfr(orgs, issue_progress, start, privacy)
+
+issue_data2 <- issue_data %>% 
+  mutate(
+    type = factor(levels = c("issue", "pull_request"),
+      case_when(
+        type == "Issue" ~ "issue",
+        type == "PullRequest" ~ "pull_request")),
+
+    status = factor(levels = c("opened", "closed", "merged"),
+      case_when(
+        merged >= start ~ "merged",
+        closed >= start ~ "closed",
+        opened >= start ~ "opened",
+        TRUE ~ NA_character_)),
+    event = case_when(
+      status == "merged" ~ merged,
+      status == "closed" ~ closed,
+      status == "opened" ~ opened)
+  )
+```
+
+````{r}
+totals <- issue_data2 %>% group_by(type, status) %>% tally() %>% mutate(n = if_else(status == "closed" | status == "merged", n * -1L, n)) %>% na.omit()
+```
+
+Row
+------------------------------
+
+### Issues / pull requests opened
+```{r}
+valueBox(totals %>% filter(status == "opened") %>% pull("n") %>% sum(), icon = "fa-exclamation-circle", color = "success")
+```
+
+### Issues closed
+```{r}
+valueBox(totals %>% filter(type == "issue", status == "closed") %>% pull("n") %>% abs(), icon = "fa-times-circle", color = "danger")
+```
+
+### Pull requests merged / closed
+```{r}
+valueBox(totals %>% filter(type == "pull_request" & (status == "merged" | status == "closed")) %>% pull("n") %>% sum() %>% abs(), icon = "ion-merge", color = "info")
+```
+
+### `r duration` change
+```{r}
+change <- sum(totals$n)
+valueBox(change, icon = "fa-exclamation-circle", color = if (change > 0) "success" else "danger")
+```
+
+### Remaining open issues
+```{r}
+valueBox(nrow(issues), icon = "fa-exclamation-circle")
+```
+
+Row
+-------------------------------------
+
+### `r duration` progess
+
+```{r}
+issue_progress_table <- issue_data2 %>%
+  # Add maintiner to the table
+    left_join(mutate(repo_summary, maintainer = desc_maintainer(description)) %>%
+              select(repo, maintainer), by = c("package" = "repo")) %>%
+  group_by(type, status) %>%
+  arrange(event) %>%
+  select(owner, package, issue, maintainer, event, status, type) %>%
+  na.omit()
+
+data_table(issue_progress_table)
+```
+
+> Issues with status modified (`r start` - `r now()`).
+
+### 30-day progress summary
+
+```{r}
+issue_data3 <- issue_data2 %>% 
+  filter(!is.na(event)) %>% 
+  select(event, owner, package, num = issue, type, status) %>% 
+  mutate(
+    date = as.Date(event),
+    event = NULL,
+    n = if_else(status %in% c("closed", "merged"), -1, 1)
+  )
+
+daily <- issue_data3 %>% 
+  group_by(date, type, status, ) %>% 
+  summarise(n = sum(n))
+
+daily %>% 
+  mutate(status = fct_relevel(status, "opened", "merged")) %>% 
+  ggplot(aes(date, n, fill = type)) + 
+  geom_col() +
+  facet_grid(status ~ ., scales = "free_y", space = "free") +
+  labs(
+    title = "Daily changes in issues and PRs",
+    x = NULL,
+    y = NULL
+  ) + 
+  scale_y_continuous(breaks = scales::breaks_width(20), expand = c(0, 5)) +
+  scale_fill_brewer(palette = "Set1", guide = NULL) + 
+  scale_x_date(date_breaks = "1 week", date_labels = "%b %d", date_minor_breaks = "1 day")
+```
+
+> `r start` - `r now()`
+
+Repository summary
+=====================================
+
+```{r repo_summary, cache = on_macos()}
+summary_table <- repo_summary %>%
+  rename("package" = "repo") %>%
+  mutate(
+    weekly_downloads = num_downloads(.$package, "last-week"),
+    maintainer = desc_maintainer(description),
+    reverse_deps = reverse_dependencies(package),
+    dev_deps = desc_dev_deps(description),
+    github_status = github_status_badge(owner, package),
+    cran_status = cran_status_badge(package),
+    activity = map2(owner, package, weekly_commits)) %>%
+  select(owner, package, maintainer, watchers, reverse_deps, weekly_downloads, open_issues, prs, p1, everything(), -description) %>%
+  rename(!!p1 := p1)
+```
+
+```{r}
+# A custom datatable with a sparkline column
+dt <- sparkline_table(
+  summary_table,
+  sparkline_column = which(colnames(summary_table) == "activity"),
+  colnames = c("52 week commit activity" = "activity"))
+dt
+```
+
+Open issues
+=====================================
+```{r issue_summary}
+substitute_emoji <- function(x) {
+  m <- gregexpr(":[^[:space:]]+:", x)
+
+  regmatches(x, m) <- lapply(regmatches(x, m), function(xx) map_chr(gsub(":", "", xx), purrr::possibly(emo::ji, "")))
+  x
+}
+
+# linkify the titles, and replace emoji
+issue_table <- mutate(issues,
+  title = glue::glue('<a rel="noopener" target="_blank" href="https://github.com/{owner}/{repo}/issues/{issue}">{title}</a>'),
+  labels = substitute_emoji(map_chr(labels, paste, collapse = ", "))) %>%
+  rename(!!p1 := p1)
+
+data_table(issue_table)
+```
+
+`r duration` pull request summary
+=====================================
+
+
+### PR authors
+```{r}
+data_table(pr_authors)
+```
+
+### PR reviewers
+```{r}
+data_table(pr_reviewers)
+```
+
+### PR pairs
+```{r}
+data_table(pr_pairs)
+```

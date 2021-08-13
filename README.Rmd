@@ -1,0 +1,23 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+# {thinkrdashboard}
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of {thinkrdashboard} is to present an overview of open-source activity of the ThinkR team.
+
+This is adapted from [Jim Hester tidyverse Dashboard](https://github.com/jimhester/tidyversedashboard).
+

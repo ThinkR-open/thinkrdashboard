@@ -1,0 +1,41 @@
+Package: thinkrdashboard
+Title: {{ Title }}
+Version: 1.0.0
+Authors@R: 
+    person(given = "Sébastien",
+           family = "Rochette",
+           role = c("aut", "cre"),
+           email = "sebastien@thinkr.fr")
+Description: {{ Description }}
+License: MIT + file LICENSE
+URL: {{ URL }}
+BugReports: {{ BugReports }}
+Imports: 
+    attachment,
+    codetools,
+    dplyr,
+    DT,
+    emo,
+    flexdashboard,
+    flextable,
+    forcats,
+    ggplot2,
+    gh,
+    git2r,
+    glue,
+    here,
+    jsonlite,
+    lubridate,
+    purrr,
+    remotes,
+    scales,
+    sparkline,
+    testthat,
+    tibble,
+    tidyr,
+    tidyversedashboard
+Remotes:
+    jimhester/tidyversedashboard
+    hadley/emo
+Encoding: UTF-8
+LazyData: true
