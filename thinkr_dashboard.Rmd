@@ -28,7 +28,7 @@ title: "`r params$title`"
 ---
 
 ```{r setup, include = FALSE}
-# knitr::opts_chunk$set(eval = FALSE)
+# knitr::opts_chunk$set(eval = FALSE, cache = TRUE)
 
 library(flexdashboard)
 library(gh)
@@ -45,7 +45,7 @@ library(tidyversedashboard)
 library(tidyr)
 library(sparkline)
 library(ggplot2)
-on_macos <- function() tolower(Sys.info()[["sysname"]]) == "darwin"
+
 gh_colors <- list(
   green = "#2cbe4e",
   red = "#CB2434",
@@ -59,7 +59,7 @@ privacy <- normalize_privacy(params$privacy)
 p1 <- "\U0001f44d"
 ```
 
-```{r pr_stats, include=FALSE, cache = on_macos()}
+```{r pr_stats, include=FALSE}
 options(repos = c(CRAN='https://cloud.r-project.org'))
 
 pr_data <- tryCatch(
@@ -67,18 +67,20 @@ pr_data <- tryCatch(
   error = function(e) message(e$content$errors))
 
 if (!is.null(pr_data)) {
-  prs <- pr_data %>% filter(updated >= dashboard_start) %>%
+  prs <- pr_data %>% 
+    filter(updated >= dashboard_start) %>%
     mutate(reviewer = map2(reviews, comments, function(reviews, comments) unique(c(reviews$reviewer, comments$commenter)))) %>%
-    select(owner, repo, issue, author, created, updated, reviewer) %>%
+    select(owner, repo, issue, author, created, updated, closed, reviewer) %>%
     unnest(cols = c(reviewer)) %>%
     filter(reviewer != author, reviewer != "codecov.io") %>%
     mutate(
       reviewer = github_user_home(reviewer),
-      author = github_user_home(author))
+      author = github_user_home(author),
+      is_closed = !is.na(closed))
 
-  pr_authors <- prs %>% group_by(author) %>% select(-reviewer) %>% unique() %>% tally(sort = TRUE)
-  pr_reviewers <- prs %>% group_by(reviewer) %>% select(-author) %>% unique() %>% tally(sort = TRUE)
-  pr_pairs <- prs %>% group_by(author, reviewer) %>% tally(sort = TRUE)
+  pr_authors <- prs %>% group_by(author, is_closed) %>% select(-reviewer) %>% unique() %>% tally(sort = TRUE)
+  pr_reviewers <- prs %>% group_by(reviewer, is_closed) %>% select(-author) %>% unique() %>% tally(sort = TRUE)
+  pr_pairs <- prs %>% group_by(author, reviewer, is_closed) %>% tally(sort = TRUE)
 } else {
   pr_authors <- NULL
   pr_reviewers <- NULL
@@ -86,7 +88,7 @@ if (!is.null(pr_data)) {
 }
 ```
 
-```{r repo_stats, include = FALSE, cache = on_macos()}
+```{r repo_stats, include = FALSE}
 repo_data <- map(orgs, org_data, privacy)
 
 # Keep only repo where we are owners
@@ -101,7 +103,7 @@ issues <- map_dfr(repo_data, "issues") %>%
 
 `r dashboard_duration` issue progress
 =====================================
-```{r issue_progress, cache = on_macos(), include = FALSE}
+```{r issue_progress, include = FALSE}
 # Keep only repo where we are owners
 issue_data <- map_dfr(orgs, issue_progress, dashboard_start, privacy) %>% 
   distinct() %>% 
@@ -162,7 +164,13 @@ valueBox(nrow(issues), icon = "fa-exclamation-circle")
 
 ### Total remaining open pull requests
 ```{r}
-valueBox(nrow(issues), icon = "fa-exclamation-circle")
+if (!is.null(pr_data)) {
+  pr_data %>% 
+    filter(!is.na(closed)) %>% 
+    valueBox(nrow(.), icon = "fa-exclamation-circle")
+} else {
+  valueBox("?", icon = "fa-exclamation-circle")
+}
 ```
 
 Row
@@ -223,7 +231,7 @@ daily %>%
 Repository summary
 =====================================
 
-```{r repo_summary, cache = on_macos()}
+```{r repo_summary}
 summary_table <- repo_summary %>%
   rename("package" = "repo") %>%
   mutate(
