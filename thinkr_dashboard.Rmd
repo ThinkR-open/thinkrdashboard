@@ -4,15 +4,17 @@ output:
     orientation: rows
     vertical_layout: fill
     theme: yeti
+    favicon: "images/favicon.ico"
+    logo: "images/logo_height_45px.png"
     source_code: "https://github.com/ThinkR-open/thinkrdashboard"
 params:
   title:
     label: Title of report
     value: ThinkR dashboard
     input: text
-  start: 
+  dashboard_start: 
     label: Start date of report
-    value: !r lubridate::today() - lubridate::ddays(30)
+    value: !r lubridate::today() - lubridate::ddays(90)
     input: date
   orgs:
     label: GitHub organizations
@@ -26,6 +28,8 @@ title: "`r params$title`"
 ---
 
 ```{r setup, include = FALSE}
+# knitr::opts_chunk$set(eval = FALSE)
+
 library(flexdashboard)
 library(gh)
 library(jsonlite)
@@ -46,8 +50,8 @@ gh_colors <- list(
   green = "#2cbe4e",
   red = "#CB2434",
   purple = "#6f42c1")
-start <- params$start
-duration <- format(today() - start, format = "%d")
+dashboard_start <- params$dashboard_start
+dashboard_duration <- format(today() - dashboard_start, format = "%d")
 orgs <- scan(text = params$orgs, what = "character", sep = ",", strip.white = TRUE, quiet = TRUE)
 privacy <- normalize_privacy(params$privacy)
 
@@ -63,7 +67,7 @@ pr_data <- tryCatch(
   error = function(e) message(e$content$errors))
 
 if (!is.null(pr_data)) {
-  prs <- pr_data %>% filter(updated >= start) %>%
+  prs <- pr_data %>% filter(updated >= dashboard_start) %>%
     mutate(reviewer = map2(reviews, comments, function(reviews, comments) unique(c(reviews$reviewer, comments$commenter)))) %>%
     select(owner, repo, issue, author, created, updated, reviewer) %>%
     unnest(cols = c(reviewer)) %>%
@@ -85,15 +89,23 @@ if (!is.null(pr_data)) {
 ```{r repo_stats, include = FALSE, cache = on_macos()}
 repo_data <- map(orgs, org_data, privacy)
 
-repo_summary <- map_dfr(repo_data, "summary")
-issues <- map_dfr(repo_data, "issues")
+# Keep only repo where we are owners
+repo_summary <- map_dfr(repo_data, "summary") %>% 
+  distinct() %>% 
+  filter(owner %in% orgs)
+issues <- map_dfr(repo_data, "issues") %>% 
+  distinct() %>% 
+  filter(owner %in% orgs)
 ```
 
 
-`r duration` issue progress
+`r dashboard_duration` issue progress
 =====================================
 ```{r issue_progress, cache = on_macos(), include = FALSE}
-issue_data <- map_dfr(orgs, issue_progress, start, privacy)
+# Keep only repo where we are owners
+issue_data <- map_dfr(orgs, issue_progress, dashboard_start, privacy) %>% 
+  distinct() %>% 
+  filter(owner %in% orgs)
 
 issue_data2 <- issue_data %>% 
   mutate(
@@ -104,9 +116,9 @@ issue_data2 <- issue_data %>%
 
     status = factor(levels = c("opened", "closed", "merged"),
       case_when(
-        merged >= start ~ "merged",
-        closed >= start ~ "closed",
-        opened >= start ~ "opened",
+        merged >= dashboard_start ~ "merged",
+        closed >= dashboard_start ~ "closed",
+        opened >= dashboard_start ~ "opened",
         TRUE ~ NA_character_)),
     event = case_when(
       status == "merged" ~ merged,
@@ -122,28 +134,33 @@ totals <- issue_data2 %>% group_by(type, status) %>% tally() %>% mutate(n = if_e
 Row
 ------------------------------
 
-### Issues / pull requests opened
+### `r dashboard_duration` Issues / pull requests opened
 ```{r}
 valueBox(totals %>% filter(status == "opened") %>% pull("n") %>% sum(), icon = "fa-exclamation-circle", color = "success")
 ```
 
-### Issues closed
+### `r dashboard_duration` Issues closed
 ```{r}
 valueBox(totals %>% filter(type == "issue", status == "closed") %>% pull("n") %>% abs(), icon = "fa-times-circle", color = "danger")
 ```
 
-### Pull requests merged / closed
+### `r dashboard_duration` Pull requests merged / closed
 ```{r}
 valueBox(totals %>% filter(type == "pull_request" & (status == "merged" | status == "closed")) %>% pull("n") %>% sum() %>% abs(), icon = "ion-merge", color = "info")
 ```
 
-### `r duration` change
+### `r dashboard_duration` issues/pull requests change
 ```{r}
 change <- sum(totals$n)
-valueBox(change, icon = "fa-exclamation-circle", color = if (change > 0) "success" else "danger")
+valueBox(change, icon = "fa-exclamation-circle", color = if (change < 0) "success" else "danger")
 ```
 
-### Remaining open issues
+### Total remaining open issues
+```{r}
+valueBox(nrow(issues), icon = "fa-exclamation-circle")
+```
+
+### Total remaining open pull requests
 ```{r}
 valueBox(nrow(issues), icon = "fa-exclamation-circle")
 ```
@@ -151,7 +168,7 @@ valueBox(nrow(issues), icon = "fa-exclamation-circle")
 Row
 -------------------------------------
 
-### `r duration` progess
+### `r dashboard_duration` progess
 
 ```{r}
 issue_progress_table <- issue_data2 %>%
@@ -166,9 +183,9 @@ issue_progress_table <- issue_data2 %>%
 data_table(issue_progress_table)
 ```
 
-> Issues with status modified (`r start` - `r now()`).
+> Issues with status modified (`r dashboard_start` - `r now()`).
 
-### 30-day progress summary
+### `r dashboard_duration`-day progress summary
 
 ```{r}
 issue_data3 <- issue_data2 %>% 
@@ -181,7 +198,7 @@ issue_data3 <- issue_data2 %>%
   )
 
 daily <- issue_data3 %>% 
-  group_by(date, type, status, ) %>% 
+  group_by(date, type, status) %>% 
   summarise(n = sum(n))
 
 daily %>% 
@@ -196,10 +213,12 @@ daily %>%
   ) + 
   scale_y_continuous(breaks = scales::breaks_width(20), expand = c(0, 5)) +
   scale_fill_brewer(palette = "Set1", guide = NULL) + 
-  scale_x_date(date_breaks = "1 week", date_labels = "%b %d", date_minor_breaks = "1 day")
+  scale_x_date(date_breaks = "1 month", date_labels = "%b %d", date_minor_breaks = "1 week") +
+  theme_bw() +
+  theme(panel.grid.major.x = element_line(colour = "grey40"))
 ```
 
-> `r start` - `r now()`
+> `r dashboard_start` - `r now()`
 
 Repository summary
 =====================================
@@ -239,15 +258,20 @@ substitute_emoji <- function(x) {
 }
 
 # linkify the titles, and replace emoji
-issue_table <- mutate(issues,
-  title = glue::glue('<a rel="noopener" target="_blank" href="https://github.com/{owner}/{repo}/issues/{issue}">{title}</a>'),
-  labels = substitute_emoji(map_chr(labels, paste, collapse = ", "))) %>%
+issue_table <- issues %>% 
+  mutate(
+    title = glue::glue('<a rel="noopener" target="_blank" href="https://github.com/{owner}/{repo}/issues/{issue}">{title}</a>'),
+    # Modify issue after title
+    issue = glue::glue('<a rel="noopener" target="_blank" href="https://github.com/{owner}/{repo}/issues/{issue}">{issue}</a>'),
+    # Modify repo after issue
+    repo = glue::glue('<a rel="noopener" target="_blank" href="https://github.com/{owner}/{repo}">{repo}</a>'),
+    labels = substitute_emoji(map_chr(labels, paste, collapse = ", "))) %>%
   rename(!!p1 := p1)
 
 data_table(issue_table)
 ```
 
-`r duration` pull request summary
+`r dashboard_duration` pull request summary
 =====================================
 
 
