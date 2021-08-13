@@ -59,9 +59,36 @@ privacy <- normalize_privacy(params$privacy)
 p1 <- "\U0001f44d"
 ```
 
+```{r remaining, results='hide'}
+# Rate limit ----
+ratelimit <- "query {
+  viewer {
+    login
+  }
+  rateLimit {
+    limit
+    cost
+    remaining
+    resetAt
+  }
+}"
+
+rate_value <- gh::gh_gql(ratelimit)
+if (rate_value[[1]]$rateLimit$remaining < 1250) {
+  # remaining seconds
+  remaining <- round(as.numeric(as.duration(as_datetime(rate_value[[1]]$rateLimit$resetAt) - now())))
+  
+  print(paste("Let's wait a little", remaining/60, "minutes"))
+  Sys.sleep(remaining)
+}
+
+```
+
+
 ```{r pr_stats, include=FALSE}
 options(repos = c(CRAN='https://cloud.r-project.org'))
 
+# Requires ~500 points for rate limitation
 pr_data <- tryCatch(
   map_dfr(orgs, org_pr, privacy = privacy),
   error = function(e) message(e$content$errors))
@@ -89,6 +116,7 @@ if (!is.null(pr_data)) {
 ```
 
 ```{r repo_stats, include = FALSE}
+# Requires ~700 points for rate limitation
 repo_data <- map(orgs, org_data, privacy)
 
 # Keep only repo where we are owners
@@ -104,6 +132,7 @@ issues <- map_dfr(repo_data, "issues") %>%
 `r dashboard_duration` issue progress
 =====================================
 ```{r issue_progress, include = FALSE}
+# Requires ~50 points for rate limitation
 # Keep only repo where we are owners
 issue_data <- map_dfr(orgs, issue_progress, dashboard_start, privacy) %>% 
   distinct() %>% 
@@ -208,7 +237,7 @@ issue_data3 <- issue_data2 %>%
 
 daily <- issue_data3 %>% 
   group_by(date, type, status) %>% 
-  summarise(n = sum(n))
+  summarise(n = sum(n), .groups = "drop")
 
 daily %>% 
   mutate(status = fct_relevel(status, "opened", "merged")) %>% 
@@ -232,6 +261,8 @@ daily %>%
 Repository summary
 =====================================
 
+
+
 ```{r repo_summary}
 summary_table <- repo_summary %>%
   rename("package" = "repo") %>%
@@ -242,6 +273,7 @@ summary_table <- repo_summary %>%
     dev_deps = desc_dev_deps(description),
     github_status = github_status_badge(owner, package),
     cran_status = cran_status_badge(package),
+    coverage_status = coverage_status_badge(owner, package, default = default_branch),
     activity = map2(owner, package, weekly_commits)) %>%
   select(owner, package, maintainer, watchers, reverse_deps, weekly_downloads, open_issues, prs, p1, everything(), -description) %>%
   rename(!!p1 := p1)
