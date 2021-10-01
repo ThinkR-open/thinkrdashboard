@@ -158,9 +158,10 @@ issue_data2 <- issue_data %>%
   )
 ```
 
-````{r}
-totals <- issue_data2 %>% group_by(type, status) %>% tally() %>% mutate(n = if_else(status == "closed" | status == "merged", n * -1L, n)) %>% na.omit()
+```{r}
+totals <- issue_data2 %>% group_by(type, status) %>% tally() %>% mutate(n = if_else(status == "closed" | status == "merged", n * -1L, n)) %>% tidyr::drop_na()
 ```
+
 
 Row
 ------------------------------
@@ -278,6 +279,21 @@ summary_table <- repo_summary %>%
   select(owner, package, maintainer, watchers, reverse_deps, weekly_downloads, open_issues, prs, p1, everything(), -description) %>%
   rename(!!p1 := p1)
 ```
+
+```{r, eval=FALSE}
+# Get codecov % coverage
+library(httr2)
+req <- request("https://codecov.io/api/gh/statnmap") %>% 
+  req_headers("Authorization" = Sys.getenv("CODECOV_TOKEN"))
+req
+
+resp <- req_perform(req)
+resp
+resp %>%
+  resp_body_json() %>% 
+  dplyr::bind_rows()
+```
+
 
 ```{r}
 # A custom datatable with a sparkline column
