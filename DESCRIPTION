@@ -35,7 +35,7 @@ Imports:
     tidyr,
     tidyversedashboard
 Remotes:
-    thinkR-open/tidyversedashboard@zero-issues,
+    thinkR-open/tidyversedashboard@more-options,
     hadley/emo
 Encoding: UTF-8
 LazyData: true
