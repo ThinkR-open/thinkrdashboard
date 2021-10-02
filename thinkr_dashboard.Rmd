@@ -60,6 +60,11 @@ p1 <- "\U0001f44d"
 ```
 
 ```{r remaining, message=FALSE}
+#' Wait if required rate is above remaining one
+#'
+#' When using the built-in GITHUB_TOKEN in GitHub Actions, the rate limit is 1,000 requests per hour per repository
+wait_for_rate <- function(required = 100) {
+  
 # Rate limit ----
 ratelimit <- "query {
   viewer {
@@ -74,21 +79,26 @@ ratelimit <- "query {
 }"
 
 rate_value <- gh::gh_gql(ratelimit)
+
 message("Rate value:", rate_value)
 
-if (rate_value[[1]]$rateLimit$remaining < 1250) {
-  # remaining seconds
-  remaining <- round(as.numeric(as.duration(as_datetime(rate_value[[1]]$rateLimit$resetAt) - now())))
-  
-  message(paste("Let's wait a little", round(remaining/60), "minutes"))
-  Sys.sleep(remaining)
+  if (rate_value[[1]]$rateLimit$remaining < required) {
+    # remaining seconds
+    remaining <- round(as.numeric(as.duration(as_datetime(rate_value[[1]]$rateLimit$resetAt) - now())))
+    
+    message(paste("Let's wait a little", round(remaining/60), "minutes"))
+    Sys.sleep(remaining)
+  } else {
+    message("Rate's good")
+  }
 }
-
 ```
 
 
 ```{r pr_stats, include=FALSE, message=FALSE}
 options(repos = c(CRAN='https://cloud.r-project.org'))
+
+wait_for_rate(280)
 
 # Requires ~500 points for rate limitation
 pr_data <- tryCatch(
@@ -116,12 +126,14 @@ if (!is.null(pr_data)) {
   pr_pairs <- NULL
 }
 
-rate_value <- gh::gh_gql(ratelimit)
-message("Rate value:", rate_value)
+# Get remaining
+wait_for_rate(1)
 ```
 
-```{r repo_stats, include = FALSE}
+```{r repo_stats, include = FALSE, message=FALSE}
 # Requires ~700 points for rate limitation
+wait_for_rate(650)
+
 repo_data <- map(orgs, org_data, privacy)
 
 # Keep only repo where we are owners
@@ -131,13 +143,18 @@ repo_summary <- map_dfr(repo_data, "summary") %>%
 issues <- map_dfr(repo_data, "issues") %>% 
   distinct() %>% 
   filter(owner %in% orgs)
+
+# Get remaining
+wait_for_rate(1)
 ```
 
 
 `r dashboard_duration` issue progress
 =====================================
-```{r issue_progress, include = FALSE}
-# Requires ~50 points for rate limitation
+```{r issue_progress, include = FALSE, message=FALSE}
+# Requires ~20 points for rate limitation
+wait_for_rate(15)
+
 # Keep only repo where we are owners
 issue_data <- map_dfr(orgs, issue_progress, dashboard_start, privacy) %>% 
   distinct() %>% 
@@ -161,6 +178,9 @@ issue_data2 <- issue_data %>%
       status == "closed" ~ closed,
       status == "opened" ~ opened)
   )
+
+# Get remaining
+wait_for_rate(1)
 ```
 
 ```{r}
@@ -352,3 +372,9 @@ data_table(pr_reviewers)
 ```{r}
 data_table(pr_pairs)
 ```
+
+```{r include=FALSE, message=FALSE}
+# Get remaining
+wait_for_rate(1)
+```
+
