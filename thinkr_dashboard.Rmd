@@ -62,6 +62,7 @@ p1 <- "\U0001f44d"
 ```{r remaining, message=FALSE}
 #' Wait if required rate is above remaining one
 #'
+#' @param required Required amount of points you need for the next step
 #' When using the built-in GITHUB_TOKEN in GitHub Actions, the rate limit is 1,000 requests per hour per repository
 wait_for_rate <- function(required = 100) {
   
@@ -126,7 +127,7 @@ if (!is.null(pr_data)) {
   pr_pairs <- NULL
 }
 
-# Get remaining
+# Get remaining rate
 wait_for_rate(1)
 ```
 
@@ -138,10 +139,10 @@ repo_data <- map(orgs, org_data, privacy)
 
 # Keep only repo where we are owners
 repo_summary <- map_dfr(repo_data, "summary") %>% 
-  distinct() %>% 
+  distinct(owner, repo, .keep_all = TRUE) %>% 
   filter(owner %in% orgs)
 issues <- map_dfr(repo_data, "issues") %>% 
-  distinct() %>% 
+  distinct(owner, repo, issue, .keep_all = TRUE) %>% 
   filter(owner %in% orgs)
 
 # Get remaining
