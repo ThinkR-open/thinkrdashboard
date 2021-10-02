@@ -140,10 +140,10 @@ repo_data <- map(orgs, org_data, privacy)
 # Keep only repo where we are owners
 repo_summary <- map_dfr(repo_data, "summary") %>% 
   distinct(owner, repo, .keep_all = TRUE) %>% 
-  filter(owner %in% orgs)
+  filter(tolower(owner) %in% tolower(orgs))
 issues <- map_dfr(repo_data, "issues") %>% 
   distinct(owner, repo, issue, .keep_all = TRUE) %>% 
-  filter(owner %in% orgs)
+  filter(tolower(owner) %in% tolower(orgs))
 
 # Get remaining
 wait_for_rate(1)
@@ -157,11 +157,11 @@ wait_for_rate(1)
 wait_for_rate(15)
 
 # Keep only repo where we are owners
-issue_data <- map_dfr(orgs, issue_progress, dashboard_start, privacy) %>% 
-  distinct() %>% 
-  filter(owner %in% orgs)
+issue_data_orig <- map_dfr(orgs, issue_progress, dashboard_start, privacy)
 
-issue_data2 <- issue_data %>% 
+issue_data2 <- issue_data_orig %>% 
+  distinct(owner, package, type, issue, .keep_all = TRUE) %>% 
+  filter(tolower(owner) %in% tolower(orgs)) %>% 
   mutate(
     type = factor(levels = c("issue", "pull_request"),
       case_when(
