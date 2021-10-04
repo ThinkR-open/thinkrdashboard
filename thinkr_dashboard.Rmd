@@ -18,7 +18,7 @@ params:
     input: date
   orgs:
     label: GitHub organizations
-    value: ThinkR-open, statnmap, colinfay, VincentGuyader, Cervangirard, MargotBr, DianeBeldame
+    value: ThinkR-open, statnmap, colinfay, VincentGuyader, Cervangirard, MargotBr, DianeBeldame, neo4j-rstats
     input: text
   privacy:
     label: Repository Privacy
