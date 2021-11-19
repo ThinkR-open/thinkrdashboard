@@ -55,6 +55,7 @@ jobs:
         run: |
           R -e 'install.packages("remotes")'
           R -e 'remotes::install_local(force = TRUE)'
+          R -e 'remotes::install_version('DT', version = "0.19")' # 0.20 fails with a max-height
 
       - name: Render Rmarkdown files
         run: |
