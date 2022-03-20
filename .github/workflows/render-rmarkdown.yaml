@@ -1,15 +1,11 @@
 on:
   push:
-    branches:
-      - main
-      - master
-      - the-ci
+    branches: [main, master]
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   schedule:
-    - cron: '0 0 * * *'  # every day at midnight
+    # every day at midnight
+    - cron: '00 00 * * *'
 
 jobs:
   build:
