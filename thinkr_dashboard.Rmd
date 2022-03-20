@@ -4,6 +4,7 @@ output:
     orientation: rows
     vertical_layout: fill
     theme: yeti
+    css: "style.css"
     favicon: "images/favicon.ico"
     logo: "images/logo_height_45px.png"
     source_code: "https://github.com/ThinkR-open/thinkrdashboard"
@@ -109,7 +110,8 @@ pr_data <- tryCatch(
 if (!is.null(pr_data)) {
   prs <- pr_data %>% 
     filter(updated >= dashboard_start) %>%
-    mutate(reviewer = map2(reviews, comments, function(reviews, comments) unique(c(reviews$reviewer, comments$commenter)))) %>%
+    mutate(reviewer = map2(reviews, comments, function(reviews, comments) unique(c(reviews$reviewer, comments$commenter)))) 
+  prs <- prs %>%
     select(owner, repo, issue, author, created, updated, closed, reviewer) %>%
     unnest(cols = c(reviewer)) %>%
     filter(reviewer != author, reviewer != "codecov.io") %>%
@@ -240,10 +242,11 @@ issue_progress_table <- issue_data2 %>%
   # Add maintiner to the table
     left_join(mutate(repo_summary, maintainer = desc_maintainer(description)) %>%
               select(repo, maintainer), by = c("package" = "repo")) %>%
-  group_by(type, status) %>%
+  # group_by(type, status) %>%
   arrange(event) %>%
   select(owner, package, issue, maintainer, event, status, type) %>%
   na.omit()
+  
 
 data_table(issue_progress_table)
 ```
