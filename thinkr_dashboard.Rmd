@@ -41,7 +41,7 @@ library(purrr)
 library(tibble)
 library(codetools) # there was a weird error on connect that needed this
 library(DT)
-# remotes::install_github("ThinkR-open/tidyversedashboard", ref = "zero-issues")
+# remotes::install_github("ThinkR-open/tidyversedashboard", ref = "more-options")
 library(tidyversedashboard)
 library(tidyr)
 library(sparkline)
@@ -84,7 +84,8 @@ rate_value <- gh::gh_gql(ratelimit)
 
 message("Rate value:", rate_value)
 
-  if (rate_value[[1]]$rateLimit$remaining < required) {
+  if ((!is.null(rate_value[[1]]$rateLimit$remaining) && rate_value[[1]]$rateLimit$remaining < required) ||
+      isTRUE(grepl("API rate limit exceeded", rate_value[[1]]$message))) {
     # remaining seconds
     remaining <- round(as.numeric(as.duration(as_datetime(rate_value[[1]]$rateLimit$resetAt) - now())))
     
